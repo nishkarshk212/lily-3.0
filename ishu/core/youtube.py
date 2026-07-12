@@ -495,9 +495,7 @@ async def _download_with_fallback(
     Try all downloaders in priority order:
       1. Cookies Base64 (yt-dlp + COOKIES_DATA)
       2. Railway YT API
-      3. Shruti API
-      4. xBit API
-      5. yt-dlp without cookies (absolute last resort)
+      3. yt-dlp without cookies (local download fallback)
     Returns (file_path, downloader_name)
     """
     video_id = _extract_video_id(link) or link
@@ -512,17 +510,7 @@ async def _download_with_fallback(
     if result:
         return result, "railway"
 
-    # 3. Shruti API
-    result = await _shruti_download(video_id, media_type)
-    if result:
-        return result, "shruti"
-
-    # 4. xBit API
-    result = await _xbit_download(link, media_type)
-    if result:
-        return result, "xbit"
-
-    # 5. yt-dlp without cookies (last resort)
+    # 3. yt-dlp without cookies (local download fallback)
     result = await _ytdlp_nocookie_download(link, media_type)
     if result:
         return result, "ytdlp"
