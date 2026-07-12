@@ -28,21 +28,13 @@ class Inline:
         timer: str = None,
         remove: bool = False,
     ) -> types.InlineKeyboardMarkup:
-        import random
-        styles = [
-            enums.ButtonStyle.PRIMARY,
-            enums.ButtonStyle.SUCCESS,
-            enums.ButtonStyle.DANGER,
-            getattr(enums.ButtonStyle, "SECONDARY", enums.ButtonStyle.PRIMARY)
-        ]
-        
         keyboard = []
         if status:
             keyboard.append(
                 [self.ikb(
                     text=status,
                     callback_data=f"controls status {chat_id}",
-                    style=random.choice(styles),
+                    style=enums.ButtonStyle.PRIMARY,
                 )]
             )
         elif timer:
@@ -50,18 +42,18 @@ class Inline:
                 [self.ikb(
                     text=timer,
                     callback_data=f"controls status {chat_id}",
-                    style=random.choice(styles),
+                    style=enums.ButtonStyle.PRIMARY,
                 )]
             )
 
         if not remove:
             keyboard.append(
                 [
-                    self.ikb(text="▷", callback_data=f"controls resume {chat_id}", style=random.choice(styles)),
-                    self.ikb(text="II", callback_data=f"controls pause {chat_id}", style=random.choice(styles)),
-                    self.ikb(text="⥁", callback_data=f"controls replay {chat_id}", style=random.choice(styles)),
-                    self.ikb(text="‣‣I", callback_data=f"controls skip {chat_id}", style=random.choice(styles)),
-                    self.ikb(text="▢", callback_data=f"controls stop {chat_id}", style=random.choice(styles)),
+                    self.ikb(text="▷", callback_data=f"controls resume {chat_id}", style=enums.ButtonStyle.PRIMARY),
+                    self.ikb(text="II", callback_data=f"controls pause {chat_id}", style=enums.ButtonStyle.PRIMARY),
+                    self.ikb(text="⥁", callback_data=f"controls replay {chat_id}", style=enums.ButtonStyle.PRIMARY),
+                    self.ikb(text="‣‣I", callback_data=f"controls skip {chat_id}", style=enums.ButtonStyle.PRIMARY),
+                    self.ikb(text="▢", callback_data=f"controls stop {chat_id}", style=enums.ButtonStyle.PRIMARY),
                 ]
             )
         return self.ikm(keyboard)
@@ -174,21 +166,14 @@ class Inline:
         ]
         if private:
             rows += [
-                [self.ikb(text=lang["help"], callback_data="help")],
+                [self.ikb(text=lang["help"], callback_data="help", style=enums.ButtonStyle.PRIMARY)],
                 [
-                    self.ikb(text=lang["support"], url=config.SUPPORT_CHAT),
-                    self.ikb(text=lang["channel"], url=config.SUPPORT_CHANNEL),
-                ],
-                [
-                    self.ikb(
-                        text=lang["source"],
-                        url="https://github.com/AnonymousX1025/AnonXMusic",
-                        style=enums.ButtonStyle.DANGER,
-                    )
+                    self.ikb(text=lang["support"], url=config.SUPPORT_CHAT, style=enums.ButtonStyle.PRIMARY),
+                    self.ikb(text=lang["channel"], url=config.SUPPORT_CHANNEL, style=enums.ButtonStyle.PRIMARY),
                 ]
             ]
         else:
-            rows += [[self.ikb(text=lang["language"], callback_data="language")]]
+            rows += [[self.ikb(text=lang["language"], callback_data="language", style=enums.ButtonStyle.PRIMARY)]]
         return self.ikm(rows)
 
     def yt_key(self, link: str) -> types.InlineKeyboardMarkup:
