@@ -91,17 +91,39 @@ def _resolve_downloaded_file(video_id: str, ext: str) -> str | None:
 # fails with "Sign in to confirm you're not a bot". Force the 'node' runtime.
 JS_RUNTIMES = {"node": {}}
 
+# YouTube's "Sign in to confirm you're not a bot" check is applied per player
+# client. The default 'web' client is the most aggressively gated; the mobile
+# and TV clients ('tv', 'ios', 'android', 'mweb', 'web_safari') frequently
+# bypass it entirely — no cookies or proxy needed. yt-dlp tries these in order
+# and uses the first that returns a playable response. Override with the
+# YT_PLAYER_CLIENTS env var (comma-separated) if YouTube shifts its gating.
+_DEFAULT_PLAYER_CLIENTS = "tv,ios,android,web_safari,mweb,web"
+
 
 def _with_js_runtime(opts: dict) -> dict:
-    """Return a copy of yt-dlp opts with the node runtime and optional proxy.
+    """Return a copy of yt-dlp opts with the node runtime, player-client
+    bypass, and optional proxy.
 
-    Set the YTDLP_PROXY env var (e.g. http://user:pass@host:port or
-    socks5://host:port) to route every yt-dlp request through a clean IP.
-    This is the reliable fix when the deploy server IP is bot-flagged by
-    YouTube ("Sign in to confirm you're not a bot") on all paths.
+    - Player clients (tv/ios/android/...) dodge the web bot-check with no
+      external dependency. Tune with the YT_PLAYER_CLIENTS env var.
+    - Set the YTDLP_PROXY env var (e.g. http://user:pass@host:port or
+      socks5://host:port) to route every yt-dlp request through a clean IP —
+      the reliable fix when the whole server IP is bot-flagged.
     """
     out = dict(opts)
     out["js_runtimes"] = JS_RUNTIMES
+
+    clients = [
+        c.strip()
+        for c in os.environ.get("YT_PLAYER_CLIENTS", _DEFAULT_PLAYER_CLIENTS).split(",")
+        if c.strip()
+    ]
+    if clients:
+        extractor_args = dict(out.get("extractor_args") or {})
+        yt_args = dict(extractor_args.get("youtube") or {})
+        yt_args["player_client"] = clients
+        extractor_args["youtube"] = yt_args
+        out["extractor_args"] = extractor_args
     proxy = os.environ.get("YTDLP_PROXY")
     if proxy:
         out["proxy"] = proxy
