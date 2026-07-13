@@ -172,18 +172,17 @@ async def play_hndlr(
 
             return
 
-    # ── Immediate play: get stream URL for instant playback ───────────────────
-    if not file.stream_url and not file.file_path:
-        # Try fast stream URL first (no download wait)
-        file.stream_url = await yt.get_stream_url(file.id, video=video)
-
-        # If stream URL failed, fall back to checking cached file or downloading
-        if not file.stream_url:
-            fname = f"downloads/{file.id}.{'mp4' if video else 'mp3'}"
-            if Path(fname).exists():
-                file.file_path = fname
-            else:
+    # ── Immediate play: prefer a cached file, else get a fresh stream URL ─────
+    if not file.file_path:
+        fname = f"downloads/{file.id}.{'mp4' if video else 'mp3'}"
+        if Path(fname).exists():
+            file.file_path = fname
+        elif not file.stream_url:
+            file.stream_url = await yt.get_stream_url(file.id, video=video)
+            if not file.stream_url:
                 file.file_path = await yt.download(file.id, video=video)
+        # If only a (possibly stale) stream_url is present, play_media() will
+        # download + play the local file if that URL has expired.
 
     # Start playback (background download is triggered inside play_media)
     await anon.play_media(chat_id=m.chat.id, message=sent, media=file)

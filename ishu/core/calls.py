@@ -98,9 +98,14 @@ class TgCall(PyTgCalls):
             else config.DEFAULT_THUMB
         ) if config.THUMB_GEN else None
 
-        # ── Step 1: Resolve media path (prefer stream URL for instant play) ───
-        media_path = media.stream_url or media.file_path
-        used_stream = bool(media.stream_url)
+        # ── Step 1: Resolve media path ─────────────────────────────────────────
+        # Prefer a locally cached file over the direct stream URL. Stream URLs
+        # (googlevideo.com) expire after ~6h, so once a track's file has been
+        # downloaded the local copy becomes the source of truth — this stops
+        # the call from dropping (and the assistant from leaving the GC) when an
+        # old URL silently dies mid-play.
+        media_path = media.file_path or media.stream_url
+        used_stream = bool(media.stream_url) and not media.file_path
 
         if not media_path and isinstance(media, Track):
             media_path = await yt.get_stream_url(media.id, video=media.video)
@@ -264,18 +269,21 @@ class TgCall(PyTgCalls):
         msg = await app.send_message(chat_id=chat_id, text=_lang["play_next"])
 
         # ── Resolve playback source for the next track ────────────────────────
-        # Priority: existing file_path → existing stream_url → get stream URL
-        if not media.file_path and not media.stream_url:
+        # Priority: existing file_path → existing stream_url → re-fetch stream
+        # URL → download. We always try to ensure a valid source here; relying
+        # on a stale (expired) stream_url alone is what caused the call to drop
+        # and the assistant to leave the GC. (If only a stale URL remains,
+        # play_media() will download + play the file when the URL fails.)
+        if not media.file_path:
             fname = f"downloads/{media.id}.{'mp4' if media.video else 'mp3'}"
             if Path(fname).exists():
                 media.file_path = fname
-            else:
-                # Try fast stream URL first
+            elif not media.stream_url:
+                # No usable file yet and no cached URL — fetch a fresh one.
                 media.stream_url = await yt.get_stream_url(media.id, video=media.video)
-
-                # If still nothing, fall back to download (blocks briefly)
-                if not media.stream_url:
-                    media.file_path = await yt.download(media.id, video=media.video)
+            # If we still have nothing usable, fall back to a local download.
+            if not media.file_path and not media.stream_url:
+                media.file_path = await yt.download(media.id, video=media.video)
 
         if not media.stream_url and not media.file_path:
             await msg.edit_text(_lang["error_no_file"].format(config.SUPPORT_CHAT))
@@ -307,6 +315,25 @@ class TgCall(PyTgCalls):
                     types.ChatUpdate.Status.LEFT_GROUP,
                     types.ChatUpdate.Status.CLOSED_VOICE_CHAT,
                 ]:
+                    # A dead stream URL (expires ~6h) or a transient Telegram
+                    # disconnect can end the call and would normally make the
+                    # assistant leave the GC. Try to recover once before giving
+                    # up: refresh the source for the current track (cached file
+                    # if present, otherwise a fresh stream URL) and replay it.
+                    media = queue.get_current(update.chat_id)
+                    if media and isinstance(media, Track):
+                        try:
+                            if not media.file_path:
+                                media.stream_url = await yt.get_stream_url(
+                                    media.id, video=media.video
+                                )
+                            await self.replay(update.chat_id)
+                            return
+                        except Exception as e:
+                            logger.warning(
+                                "Auto-reconnect failed for %s: %s",
+                                update.chat_id, e,
+                            )
                     await self.stop(update.chat_id)
 
 

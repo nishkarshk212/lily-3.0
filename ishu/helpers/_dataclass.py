@@ -11,29 +11,29 @@ class Media:
     id: str
     duration: str = "00:00"
     duration_sec: int = 0
-    file_path: str = None
-    stream_url: str = None
+    file_path: str | None = None
+    stream_url: str | None = None
     message_id: int = 0
-    title: str = None
-    url: str = None
+    title: str | None = None
+    url: str | None = None
     time: int = 0
-    user: str = None
+    user: str | None = None
     video: bool = False
 
 
 @dataclass
 class Track:
     id: str
-    channel_name: str = None
+    channel_name: str | None = None
     duration: str = "00:00"
     duration_sec: int = 0
-    title: str = None
-    url: str = None
-    file_path: str = None
-    stream_url: str = None
+    title: str | None = None
+    url: str | None = None
+    file_path: str | None = None
+    stream_url: str | None = None
     message_id: int = 0
     time: int = 0
-    thumbnail: str = None
-    user: str = None
-    view_count: str = None
+    thumbnail: str | None = None
+    user: str | None = None
+    view_count: str | None = None
     video: bool = False
