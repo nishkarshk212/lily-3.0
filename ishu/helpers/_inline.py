@@ -58,13 +58,16 @@ class Inline:
                 ]
             )
             # Autoplay toggle: green (PRIMARY) when on, red (DANGER) when off.
+            # NOTE: Telegram inline buttons render plain Unicode only — custom
+            # emoji ids (<emoji id=...>) do NOT work in button labels, so use
+            # the Unicode equivalent (🔁) of the requested id 6095947121591064749.
             keyboard.append(
                 [
                     self.ikb(
                         text=(
-                            "<emoji id=6095947121591064749>🔁</emoji> Autoplay: On"
+                            "🔁 Autoplay: On"
                             if autoplay
-                            else "<emoji id=6095947121591064749>🔁</emoji> Autoplay: Off"
+                            else "🔁 Autoplay: Off"
                         ),
                         callback_data=f"autoplay {chat_id}",
                         style=(
