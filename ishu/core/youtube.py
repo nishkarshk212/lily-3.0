@@ -93,9 +93,18 @@ JS_RUNTIMES = {"node": {}}
 
 
 def _with_js_runtime(opts: dict) -> dict:
-    """Return a copy of yt-dlp opts that explicitly selects the node runtime."""
+    """Return a copy of yt-dlp opts with the node runtime and optional proxy.
+
+    Set the YTDLP_PROXY env var (e.g. http://user:pass@host:port or
+    socks5://host:port) to route every yt-dlp request through a clean IP.
+    This is the reliable fix when the deploy server IP is bot-flagged by
+    YouTube ("Sign in to confirm you're not a bot") on all paths.
+    """
     out = dict(opts)
     out["js_runtimes"] = JS_RUNTIMES
+    proxy = os.environ.get("YTDLP_PROXY")
+    if proxy:
+        out["proxy"] = proxy
     return out
 
 
