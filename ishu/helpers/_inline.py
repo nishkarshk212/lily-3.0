@@ -58,14 +58,12 @@ class Inline:
                 ]
             )
             # Autoplay toggle: green (PRIMARY) when on, red (DANGER) when off.
-            # Use plain normal-case text + 🔁 (U+1F501, universally rendered).
-            # Avoid small-caps/symbol-only labels — they render as blank tofu
-            # in many Telegram clients. State shows via colour AND text.
+            # Label per user request: small-caps "ᴀᴜᴛᴏᴘʟᴀʏ" + ♾ (U+267E) when on.
             keyboard.append(
                 [
                     self.ikb(
                         text=(
-                            "🔁 Autoplay: ON" if autoplay else "Autoplay: OFF"
+                            "ᴀᴜᴛᴏᴘʟᴀʏ ♾" if autoplay else "ᴀᴜᴛᴏᴘʟᴀʏ"
                         ),
                         callback_data=f"autoplay {chat_id}",
                         style=(
