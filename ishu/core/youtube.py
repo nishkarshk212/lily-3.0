@@ -544,12 +544,19 @@ class YouTube:
         cookies_data = getattr(config, "COOKIES_DATA", None) or os.environ.get("COOKIES_DATA")
         if cookies_data:
             try:
-                import base64
-                decoded = base64.b64decode(cookies_data).decode("utf-8")
+                import base64, gzip
+                raw = base64.b64decode(cookies_data)
+                # Accept both plain base64 (Netscape cookie text) and gzip+base64
+                # (gzip magic is 0x1f 0x8b). Some env generators emit the latter.
+                if raw[:2] == b"\x1f\x8b":
+                    decoded = gzip.decompress(raw).decode("utf-8")
+                else:
+                    decoded = raw.decode("utf-8")
                 os.makedirs(self.cookies_dir, exist_ok=True)
                 with open(os.path.join(self.cookies_dir, "cookie_0.txt"), "w") as f:
                     f.write(decoded)
-                logger.info("Loaded cookies from COOKIES_DATA (base64).")
+                logger.info("Loaded cookies from COOKIES_DATA (base64%s).",
+                            " +gzip" if raw[:2] == b"\x1f\x8b" else "")
             except Exception as e:
                 logger.error("Error decoding COOKIES_DATA: %s", e)
 
