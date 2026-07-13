@@ -28,9 +28,12 @@ class Config:
         self.YTPROXY_URL = getenv("YTPROXY_URL", "https://tgapi.xbitcode.com")  # xBit Music Endpoint
         self.YT_API_KEY = getenv("YT_API_KEY", "")  # Get from https://t.me/tgmusic_apibot
 
-        # Railway self-hosted YouTube API
-        self.RAILWAY_YT_API_URL = getenv("RAILWAY_YT_API_URL", "https://youtube-api-music-production-824b.up.railway.app")
-        self.RAILWAY_YT_API_KEY = getenv("RAILWAY_YT_API_KEY", "SLtWox3TFKKHuMySdvz_4y2Ju3NlSHYk")
+        # Self-hosted YouTube API — EC2 proxy (alive, needs X-API-Key = your Lily- key).
+        # Falls back to Railway proxy if RAILWAY_YT_API_URL/KEY are also set.
+        # NOTE: the old default Railway 824b key is dead (403); set the EC2 URL
+        # here and provide the real key via RAILWAY_YT_API_KEY env var.
+        self.RAILWAY_YT_API_URL = getenv("RAILWAY_YT_API_URL", "http://13.61.0.2:8000")
+        self.RAILWAY_YT_API_KEY = getenv("RAILWAY_YT_API_KEY", "")
 
         # Shruti API — Primary download source (get key from @SHRUTIAPIBOT)
         self.SHRUTI_API_URL = getenv("SHRUTI_API_URL", "http://api01.shrutibots.site")
