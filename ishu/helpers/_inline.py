@@ -27,6 +27,7 @@ class Inline:
         status: str = None,
         timer: str = None,
         remove: bool = False,
+        autoplay: bool = False,
     ) -> types.InlineKeyboardMarkup:
         keyboard = []
         if status:
@@ -54,6 +55,24 @@ class Inline:
                     self.ikb(text="⥁", callback_data=f"controls replay {chat_id}", style=enums.ButtonStyle.PRIMARY),
                     self.ikb(text="‣‣I", callback_data=f"controls skip {chat_id}", style=enums.ButtonStyle.PRIMARY),
                     self.ikb(text="▢", callback_data=f"controls stop {chat_id}", style=enums.ButtonStyle.PRIMARY),
+                ]
+            )
+            # Autoplay toggle: green (PRIMARY) when on, red (DANGER) when off.
+            keyboard.append(
+                [
+                    self.ikb(
+                        text=(
+                            "<emoji id=6095947121591064749>🔁</emoji> Autoplay: On"
+                            if autoplay
+                            else "<emoji id=6095947121591064749>🔁</emoji> Autoplay: Off"
+                        ),
+                        callback_data=f"autoplay {chat_id}",
+                        style=(
+                            enums.ButtonStyle.PRIMARY
+                            if autoplay
+                            else enums.ButtonStyle.DANGER
+                        ),
+                    )
                 ]
             )
         return self.ikm(keyboard)

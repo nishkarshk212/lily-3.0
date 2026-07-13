@@ -117,10 +117,29 @@ async def _controls(_, query: types.CallbackQuery):
                 flags=re.DOTALL,
             )
             keyboard = buttons.controls(
-                chat_id, status=status if action != "resume" else None
+                chat_id, status=status if action != "resume" else None,
+                autoplay=await db.get_autoplay(chat_id),
             )
         await query.edit_message_text(
             f"{mtext}\n\n<blockquote>{reply}</blockquote>", reply_markup=keyboard
+        )
+    except Exception:
+        pass
+
+
+@app.on_callback_query(filters.regex("autoplay") & ~app.bl_users)
+@lang.language()
+@can_manage_vc
+async def _autoplay(_, query: types.CallbackQuery):
+    chat_id = int(query.data.split()[1])
+    enable = not await db.get_autoplay(chat_id)
+    await db.set_autoplay(chat_id, enable)
+    await query.answer(
+        f"Autoplay {'enabled' if enable else 'disabled'}", show_alert=True
+    )
+    try:
+        await query.edit_message_reply_markup(
+            reply_markup=buttons.controls(chat_id, autoplay=enable)
         )
     except Exception:
         pass

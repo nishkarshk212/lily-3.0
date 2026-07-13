@@ -190,7 +190,7 @@ class TgCall(PyTgCalls):
                     media.user,
                 )
 
-                keyboard = buttons.controls(chat_id)
+                keyboard = buttons.controls(chat_id, autoplay=await db.get_autoplay(chat_id))
 
                 if _thumb:
                     await message.edit_media(
@@ -236,6 +236,35 @@ class TgCall(PyTgCalls):
         await self.play_media(chat_id, msg, media)
 
 
+    async def _autoplay_next(self, chat_id: int, last_title: str) -> None:
+        """Queue up a related track (derived from the last title) and play it."""
+        _lang = await lang.get_lang(chat_id)
+        msg = await app.send_message(chat_id=chat_id, text=_lang["play_searching"])
+
+        query = last_title.split("|")[0].split("(")[0].strip()
+        track = await yt.search(f"{query} official audio", msg.id, video=False)
+        if not track:
+            return await self.stop(chat_id)
+
+        track.user = "Autoplay"
+        # Resolve source (file > cached URL > fresh URL > download)
+        if not track.file_path:
+            fname = f"downloads/{track.id}.mp3"
+            if Path(fname).exists():
+                track.file_path = fname
+            elif not track.stream_url:
+                track.stream_url = await yt.get_stream_url(track.id)
+            if not track.file_path and not track.stream_url:
+                track.file_path = await yt.download(track.id)
+        if not track.stream_url and not track.file_path:
+            await msg.edit_text(_lang["error_no_file"].format(config.SUPPORT_CHAT))
+            return await self.play_next(chat_id)
+
+        _bg_download(track)
+        track.message_id = msg.id
+        await self.play_media(chat_id, msg, track)
+
+
     async def play_next(self, chat_id: int) -> None:
         if loop := await db.get_loop(chat_id):
             await db.set_loop(chat_id, loop - 1)
@@ -251,6 +280,14 @@ class TgCall(PyTgCalls):
 
         # ── FIX: check media is not None BEFORE accessing its attributes ──────
         if not media:
+            # Autoplay: when the queue empties, fetch a related track from the
+            # last played title so the stream keeps going instead of stopping.
+            if await db.get_autoplay(chat_id):
+                last = current_media
+                title = getattr(last, "title", None) if last else None
+                if title:
+                    await self._autoplay_next(chat_id, title)
+                return
             return await self.stop(chat_id)
 
         # Delete the "now playing" message of the next track (it was "queued")
