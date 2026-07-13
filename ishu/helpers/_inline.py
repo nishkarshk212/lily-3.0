@@ -58,13 +58,13 @@ class Inline:
                 ]
             )
             # Autoplay toggle: green (PRIMARY) when on, red (DANGER) when off.
-            # Telegram inline buttons render plain Unicode only, so use small-caps
-            # text with the recycling symbol (♻) requested by the user.
+            # Telegram inline buttons render plain Unicode only. Use small-caps
+            # text + 🔁 (U+1F501, universally rendered).
             keyboard.append(
                 [
                     self.ikb(
                         text=(
-                            "ᴀᴜᴛᴏᴘʟᴀʏ ♻" if autoplay else "ᴀᴜᴛᴏᴘʟᴀʏ"
+                            "ᴀᴜᴛᴏᴘʟᴀʏ 🔁" if autoplay else "ᴀᴜᴛᴏᴘʟᴀʏ"
                         ),
                         callback_data=f"autoplay {chat_id}",
                         style=(

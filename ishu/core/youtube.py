@@ -166,11 +166,11 @@ async def _cookies_download(link: str, media_type: str) -> str | None:
             return existing
 
         cookie = cookie_txt_file()
-        # Cookie downloads are tried first by default: the deploy server IP is
-        # bot-flagged by YouTube (logs 2026-07-13 "Sign in to confirm you're not
-        # a bot" on the no-cookie path), so a signed-in account is needed to pass
-        # the challenge. Opt OUT with DISABLE_COOKIE_DOWNLOAD=1 to force anonymous.
-        if not cookie or os.environ.get("DISABLE_COOKIE_DOWNLOAD"):
+        # Default to the anonymous yt-dlp path: the deploy server IP is 403'd by
+        # googlevideo for signed-in (cookie) requests (logs 2026-07-13), while
+        # the no-cookie download succeeds. Opt IN to cookies with
+        # ALLOW_COOKIE_DOWNLOAD=1 only if anonymous gets bot-flagged.
+        if not cookie or not os.environ.get("ALLOW_COOKIE_DOWNLOAD"):
             return None
 
         try:
@@ -876,10 +876,10 @@ class YouTube:
 
             loop = asyncio.get_event_loop()
             def _run():
-                # The deploy server IP is bot-flagged by YouTube, so a signed-in
-                # account (cookies) is needed to clear the challenge. Attach the
-                # cookiefile by default; opt out with DISABLE_COOKIE_DOWNLOAD=1.
-                if cookie and not os.environ.get("DISABLE_COOKIE_DOWNLOAD"):
+                # Default to anonymous extract (no-cookie download works on this
+                # IP; signed-in requests 403). Attach cookiefile only when
+                # ALLOW_COOKIE_DOWNLOAD=1 is set.
+                if cookie and os.environ.get("ALLOW_COOKIE_DOWNLOAD"):
                     ydl_opts["cookiefile"] = cookie
                 with yt_dlp.YoutubeDL(_with_js_runtime(ydl_opts)) as ydl:
                     info = ydl.extract_info(link, download=False)
