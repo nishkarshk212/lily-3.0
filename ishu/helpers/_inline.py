@@ -57,7 +57,7 @@ class Inline:
                     self.ikb(text="▢", callback_data=f"controls stop {chat_id}", style=enums.ButtonStyle.PRIMARY),
                 ]
             )
-            # Autoplay toggle: green (PRIMARY) when on, red (DANGER) when off.
+            # Autoplay toggle: green (POSITIVE) when on, red (NEGATIVE) when off.
             # Label per user request: small-caps "ᴀᴜᴛᴏᴘʟᴀʏ" + ♾ (U+267E) when on.
             keyboard.append(
                 [
@@ -67,9 +67,9 @@ class Inline:
                         ),
                         callback_data=f"autoplay {chat_id}",
                         style=(
-                            enums.ButtonStyle.PRIMARY
+                            enums.ButtonStyle.POSITIVE
                             if autoplay
-                            else enums.ButtonStyle.DANGER
+                            else enums.ButtonStyle.NEGATIVE
                         ),
                     )
                 ]
