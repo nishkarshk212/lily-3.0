@@ -166,8 +166,12 @@ async def _cookies_download(link: str, media_type: str) -> str | None:
             return existing
 
         cookie = cookie_txt_file()
-        # Only proceed if we actually have cookies; no-cookie yt-dlp is priority 4
-        if not cookie:
+        # Only proceed if we actually have cookies; no-cookie yt-dlp is priority 4.
+        # NOTE: signed-in cookies frequently make googlevideo return 403 from the
+        # deploy region (they did in logs on 2026-07-13), whereas the anonymous
+        # yt-dlp path downloaded fine. So gate cookie downloads behind an opt-in
+        # env flag — by default we fall through to the working no-cookie path.
+        if not cookie or not os.environ.get("ALLOW_COOKIE_DOWNLOAD"):
             return None
 
         try:
@@ -873,7 +877,13 @@ class YouTube:
 
             loop = asyncio.get_event_loop()
             def _run():
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                # Signed-in cookies make googlevideo 403 from this region
+                # (verified 2026-07-13); the anonymous extract fails too but
+                # avoids wasting a cookie round-trip. Opt-in via
+                # ALLOW_COOKIE_DOWNLOAD only.
+                if cookie and os.environ.get("ALLOW_COOKIE_DOWNLOAD"):
+                    ydl_opts["cookiefile"] = cookie
+                with yt_dlp.YoutubeDL(_with_js_runtime(ydl_opts)) as ydl:
                     info = ydl.extract_info(link, download=False)
                     # For merged formats, prefer the best audio URL
                     if info.get("url"):
