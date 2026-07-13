@@ -528,8 +528,8 @@ async def _download_with_fallback(
     """
     Try all downloaders in priority order:
       1. Cookies Base64 (yt-dlp + COOKIES_DATA)
-      2. Railway YT API
-      3. yt-dlp without cookies (local download fallback)
+      2. yt-dlp without cookies (local download)
+      3. Railway YT API (used last — rate-limited / dead-key prone)
     Returns (file_path, downloader_name)
     """
     video_id = _extract_video_id(link) or link
@@ -539,15 +539,15 @@ async def _download_with_fallback(
     if result:
         return result, "cookies_b64"
 
-    # 2. Railway YT API
-    result = await _railway_download(video_id, media_type)
-    if result:
-        return result, "railway"
-
-    # 3. yt-dlp without cookies (local download fallback)
+    # 2. yt-dlp without cookies (local download)
     result = await _ytdlp_nocookie_download(link, media_type)
     if result:
         return result, "ytdlp"
+
+    # 3. Railway YT API (last resort)
+    result = await _railway_download(video_id, media_type)
+    if result:
+        return result, "railway"
 
     logger.error("All download methods failed for: %s", video_id)
     return None, "none"
