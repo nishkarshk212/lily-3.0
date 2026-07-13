@@ -845,6 +845,7 @@ class YouTube:
         self,
         video_id: str,
         video: bool = False,
+        force_cookies: bool = False,
     ) -> str | None:
         """
         Get a direct stream URL for instant playback (no download).
@@ -852,6 +853,8 @@ class YouTube:
         Method 1 — Cookies Base64 (yt-dlp extract_info):
           Uses COOKIES_DATA-decoded cookie file for authenticated access.
           Returns a direct googlevideo.com URL valid for ~6 hours.
+          Cookies are attached when ALLOW_COOKIE_DOWNLOAD=1 OR force_cookies
+          (used by autoplay to stream live without downloading).
 
         Method 2 — Railway API:
           Returns the Railway proxy endpoint URL and validates it with
@@ -871,17 +874,19 @@ class YouTube:
                 "no_warnings": True,
             }
             ydl_opts = _with_js_runtime(ydl_opts)
-            if cookie:
-                ydl_opts["cookiefile"] = cookie
+            # Attach cookies only when opted in (or forced by autoplay). The
+            # deploy IP 403s signed-in googlevideo requests, so the anonymous
+            # extract is the reliable default for normal playback.
+            use_cookies = bool(cookie) and (
+                force_cookies or os.environ.get("ALLOW_COOKIE_DOWNLOAD")
+            )
 
             loop = asyncio.get_event_loop()
             def _run():
-                # Default to anonymous extract (no-cookie download works on this
-                # IP; signed-in requests 403). Attach cookiefile only when
-                # ALLOW_COOKIE_DOWNLOAD=1 is set.
-                if cookie and os.environ.get("ALLOW_COOKIE_DOWNLOAD"):
-                    ydl_opts["cookiefile"] = cookie
-                with yt_dlp.YoutubeDL(_with_js_runtime(ydl_opts)) as ydl:
+                _opts = dict(ydl_opts)
+                if use_cookies:
+                    _opts["cookiefile"] = cookie
+                with yt_dlp.YoutubeDL(_with_js_runtime(_opts)) as ydl:
                     info = ydl.extract_info(link, download=False)
                     # For merged formats, prefer the best audio URL
                     if info.get("url"):

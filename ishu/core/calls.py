@@ -237,7 +237,7 @@ class TgCall(PyTgCalls):
 
 
     async def _autoplay_next(self, chat_id: int, last_title: str) -> None:
-        """Queue up a related track (derived from the last title) and play it."""
+        """Fetch a related track and stream it live via cookies (no download)."""
         _lang = await lang.get_lang(chat_id)
         msg = await app.send_message(chat_id=chat_id, text=_lang["play_searching"])
 
@@ -247,20 +247,19 @@ class TgCall(PyTgCalls):
             return await self.stop(chat_id)
 
         track.user = "Autoplay"
-        # Resolve source (file > cached URL > fresh URL > download)
-        if not track.file_path:
-            fname = f"downloads/{track.id}.mp3"
-            if Path(fname).exists():
-                track.file_path = fname
-            elif not track.stream_url:
-                track.stream_url = await yt.get_stream_url(track.id)
-            if not track.file_path and not track.stream_url:
-                track.file_path = await yt.download(track.id)
+        # Live stream via cookies base64 — no file download. Force cookies so
+        # the googlevideo URL is fetched with the signed-in account. play_media
+        # then plays it directly; the background download is intentionally
+        # skipped (user wants live streaming, not local files).
+        track.stream_url = await yt.get_stream_url(track.id, force_cookies=True)
+        if not track.stream_url:
+            # Stream failed (e.g. region 403) — fall back to a one-off download
+            # so autoplay still keeps the queue alive.
+            track.file_path = await yt.download(track.id)
         if not track.stream_url and not track.file_path:
             await msg.edit_text(_lang["error_no_file"].format(config.SUPPORT_CHAT))
             return await self.play_next(chat_id)
 
-        _bg_download(track)
         track.message_id = msg.id
         await self.play_media(chat_id, msg, track)
 
