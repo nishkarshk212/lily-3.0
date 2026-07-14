@@ -21,14 +21,20 @@ async def _watcher_vc(_, m: types.Message):
 async def auto_leave():
     while True:
         await asyncio.sleep(3600)
+        # Never leave groups the bot itself is present in — the userbot must
+        # stay a member so it can serve voice chats and so the dialog crawl
+        # keeps counting them. Only stray/unknown inactive groups get cleaned.
+        known = set(await db.get_chats())
         for ub in userbot.clients:
             try:
                 chats = [dialog.chat.id async for dialog in ub.get_dialogs()
-                            if dialog.chat.type in [
-                                enums.ChatType.GROUP, enums.ChatType.SUPERGROUP,
-                            ]][-20:]
+                         if dialog.chat.type in [
+                             enums.ChatType.GROUP, enums.ChatType.SUPERGROUP,
+                         ]]
                 for chat in chats:
-                    if chat in [app.logger, -1001686672798, -1001549206010]:
+                    if chat in (app.logger,):
+                        continue
+                    if chat in known:
                         continue
                     if chat in db.active_calls:
                         continue
