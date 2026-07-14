@@ -591,7 +591,12 @@ class YouTube:
         if cookies_data:
             try:
                 import base64, gzip
-                raw = base64.b64decode(cookies_data)
+                # Be tolerant: env UIs and copy/paste often add whitespace,
+                # newlines, or a truncated trailing char. Strip surrounds, and
+                # pad a missing '=' so b64decode doesn't throw on alignment.
+                cd = cookies_data.strip().replace("\n", "").replace("\r", "").replace(" ", "")
+                pad = (-len(cd)) % 4
+                raw = base64.b64decode(cd + "=" * pad)
                 # Accept both plain base64 (Netscape cookie text) and gzip+base64
                 # (gzip magic is 0x1f 0x8b). Some env generators emit the latter.
                 if raw[:2] == b"\x1f\x8b":
@@ -604,7 +609,8 @@ class YouTube:
                 logger.info("Loaded cookies from COOKIES_DATA (base64%s).",
                             " +gzip" if raw[:2] == b"\x1f\x8b" else "")
             except Exception as e:
-                logger.error("Error decoding COOKIES_DATA: %s", e)
+                logger.error("Error decoding COOKIES_DATA (len=%d): %s",
+                             len(cookies_data.strip()), e)
 
         self.dl_stats = {
             "total_requests": 0,
