@@ -33,7 +33,7 @@ class Inline:
         status: str = None,
         timer: str = None,
         remove: bool = False,
-        autoplay: bool = False,
+        autoplay: bool | None = None,
     ) -> types.InlineKeyboardMarkup:
         # Reuse the last-known rows for any dimension not explicitly passed,
         # so a single-row update (timer tick OR autoplay toggle) preserves the
@@ -44,8 +44,10 @@ class Inline:
                 status = prev.get("status")
             if timer is None:
                 timer = prev.get("timer")
-            if not remove:
-                autoplay = autoplay or prev.get("autoplay", False)
+            # None means "not explicitly passed" -> reuse cached state. An
+            # explicit False (toggle OFF) must win, so only fall back on None.
+            if autoplay is None and not remove:
+                autoplay = prev.get("autoplay", False)
 
         keyboard = []
         if status:
