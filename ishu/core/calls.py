@@ -237,12 +237,21 @@ class TgCall(PyTgCalls):
 
 
     async def _autoplay_next(self, chat_id: int, last_title: str) -> None:
-        """Fetch a related track and stream it live via cookies (no download)."""
+        """Fetch a RELATED track and stream it live via cookies (no download)."""
         _lang = await lang.get_lang(chat_id)
         msg = await app.send_message(chat_id=chat_id, text=_lang["play_searching"])
 
-        query = last_title.split("|")[0].split("(")[0].strip()
-        track = await yt.search(f"{query} official audio", msg.id, video=False)
+        # Prefer YouTube's own 'related' track (guaranteed different from the
+        # current one) using the last played video id. Fall back to a search of
+        # the title if we have no id or related lookup fails.
+        last = queue.get_current(chat_id)
+        track = None
+        last_id = getattr(last, "id", None)
+        if last_id:
+            track = await yt.get_related(last_id, msg.id)
+        if not track:
+            query = last_title.split("|")[0].split("(")[0].strip()
+            track = await yt.search(f"{query} official audio", msg.id, video=False)
         if not track:
             return await self.stop(chat_id)
 

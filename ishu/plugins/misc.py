@@ -91,7 +91,8 @@ async def update_timer(length=10, sleep=5):
                     chat_id=chat_id,
                     message_id=message_id,
                     reply_markup=buttons.controls(
-                        chat_id=chat_id, timer=timer, remove=remove
+                        chat_id=chat_id, timer=timer, remove=remove,
+                        autoplay=await db.get_autoplay(chat_id),
                     ),
                 )
             except asyncio.CancelledError:

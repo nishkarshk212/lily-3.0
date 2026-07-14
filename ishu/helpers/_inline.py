@@ -8,6 +8,12 @@ from pyrogram import enums, types
 from ishu import app, config, lang
 from ishu.core.lang import lang_codes
 
+# Per-chat cache of the last panel rows so a partial re-render (e.g. toggling
+# autoplay, or the timer updater) keeps the other rows instead of clobbering
+# them. Without this, the autoplay button and the progress slider fight each
+# other: whichever task re-renders last wins and the other row vanishes.
+_panel_state: dict[int, dict] = {}
+
 
 class Inline:
     def __init__(self):
@@ -29,6 +35,18 @@ class Inline:
         remove: bool = False,
         autoplay: bool = False,
     ) -> types.InlineKeyboardMarkup:
+        # Reuse the last-known rows for any dimension not explicitly passed,
+        # so a single-row update (timer tick OR autoplay toggle) preserves the
+        # rest of the panel.
+        if chat_id in _panel_state:
+            prev = _panel_state[chat_id]
+            if status is None:
+                status = prev.get("status")
+            if timer is None:
+                timer = prev.get("timer")
+            if not remove:
+                autoplay = autoplay or prev.get("autoplay", False)
+
         keyboard = []
         if status:
             keyboard.append(
@@ -76,6 +94,15 @@ class Inline:
                     )
                 ]
             )
+
+        # Cache the resolved panel so the next partial re-render keeps these
+        # rows (timer updater <-> autoplay toggle no longer clobber each other).
+        _panel_state[chat_id] = {
+            "status": status,
+            "timer": timer,
+            "autoplay": autoplay,
+            "remove": remove,
+        }
         return self.ikm(keyboard)
 
     def help_markup(

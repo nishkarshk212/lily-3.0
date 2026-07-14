@@ -28,6 +28,7 @@ from pyrogram.types import Message
 
 from ishu import config, logger
 from ishu.helpers import utils
+from ishu.helpers._dataclass import Track
 
 # ── Config ────────────────────────────────────────────────────────────────────
 SHRUTI_API_URL      = getattr(config, "SHRUTI_API_URL",      "https://api.shrutibots.site")
@@ -131,21 +132,32 @@ def _with_js_runtime(opts: dict) -> dict:
 
 
 # ── Cookie helper ─────────────────────────────────────────────────────────────
+_COOKIE_PATH: str | None = None
+
 def cookie_txt_file() -> str | None:
-    """Return a random cookie .txt file path from the cookies/ folder."""
+    """Return the decoded COOKIES_DATA path (cookies/cookie_0.txt).
+
+    COOKIES_DATA always decodes to cookie_0.txt in __init__, so there is no
+    need to glob the folder + pick a random file + append to logs.csv on every
+    call (that was one disk read + one disk write per play). Resolve once and
+    cache. Falls back to a glob only if cookie_0.txt is absent (legacy setups).
+    """
+    global _COOKIE_PATH
+    if _COOKIE_PATH is not None:
+        return _COOKIE_PATH
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    folder = os.path.abspath(os.path.join(base_dir, "..", "cookies"))
+    primary = os.path.join(folder, "cookie_0.txt")
+    if os.path.exists(primary):
+        _COOKIE_PATH = primary
+        return primary
+    # Legacy: no COOKIES_DATA decode yet — fall back to any .txt present.
     try:
-        base_dir  = os.path.dirname(os.path.abspath(__file__))
-        folder    = os.path.abspath(os.path.join(base_dir, "..", "cookies"))
         txt_files = glob.glob(os.path.join(folder, "*.txt"))
-        if not txt_files:
-            return None
-        chosen   = random.choice(txt_files)
-        log_file = os.path.join(folder, "logs.csv")
-        with open(log_file, "a") as f:
-            f.write(f"Chosen: {chosen}\n")
-        return chosen
     except Exception:
-        return None
+        txt_files = []
+    _COOKIE_PATH = txt_files[0] if txt_files else None
+    return _COOKIE_PATH
 
 
 # ── Link helpers ──────────────────────────────────────────────────────────────
@@ -867,10 +879,68 @@ class YouTube:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        stdout, stderr = await proc.communicate()
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
+            return 0, "yt-dlp video extract timed out"
         if stdout:
             return 1, stdout.decode().split("\n")[0]
         return 0, stderr.decode()
+
+    async def get_related(self, video_id: str, message_id: int) -> "Track | None":
+        """Return a RELATED Track for autoplay (NOT the same song).
+
+        Uses yt-dlp to pull the 'related' videos of the current track, then
+        returns the first one as a Track. This guarantees a different track
+        (YouTube's own up-next recommendations) instead of re-searching the
+        current title (which just returns the same song).
+        """
+        link = self.base + video_id
+        loop = asyncio.get_event_loop()
+        def _run():
+            try:
+                with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True,
+                                        "extract_flat": True}) as ydl:
+                    info = ydl.extract_info(link, download=False) or {}
+                rel = info.get("related_videos") or []
+                # Prefer an actual video entry, not a playlist/mix.
+                for r in rel:
+                    rid = r.get("id")
+                    if rid and r.get("url") and "list=" not in (r.get("url") or ""):
+                        return r
+                return rel[0] if rel else None
+            except Exception as e:
+                logger.warning("get_related failed for %s: %s", video_id, e)
+                return None
+        try:
+            r = await asyncio.wait_for(loop.run_in_executor(None, _run), timeout=20)
+        except asyncio.TimeoutError:
+            logger.warning("get_related timed out for %s", video_id)
+            return None
+        if not r:
+            return None
+        rid = r.get("id")
+        if not rid:
+            return None
+        duration_min = r.get("duration") or "00:00"
+        try:
+            duration_sec = int(utils.to_seconds(duration_min)) if duration_min else 0
+        except Exception:
+            duration_sec = 0
+        return Track(
+            id=rid,
+            title=r.get("title", "Unknown"),
+            url=r.get("url", self.base + rid),
+            duration=duration_min,
+            duration_sec=duration_sec,
+            thumbnail=(r.get("thumbnails") or [{}])[0].get("url", "").split("?")[0],
+            channel_name=r.get("channel") or r.get("uploader") or "",
+            message_id=message_id,
+            video=False,
+            time=int(_time.time()),
+        )
 
     async def get_stream_url(
         self,
@@ -893,9 +963,17 @@ class YouTube:
         """
         link = _normalize_youtube_link(video_id, self.base)
 
-        # ── Method 1: yt-dlp with cookies base64 ─────────────────────────────
+        # Decide cookie attachment up front. The cookie scan + signed-in
+        # extract is skipped entirely for the default (anonymous) path, so a
+        # normal play doesn't pay for a glob + 30s-bound extract attempt that
+        # the flagged IP will only reject anyway.
+        cookie = cookie_txt_file()
+        use_cookies = bool(cookie) and (
+            force_cookies or os.environ.get("ALLOW_COOKIE_DOWNLOAD")
+        )
+
+        # ── Method 1: yt-dlp stream-URL extract (anonymous or cookie) ────────
         try:
-            cookie = cookie_txt_file()
             ydl_opts = {
                 "format": (
                     "bestvideo[height<=720]+bestaudio/best[height<=720]"
@@ -905,12 +983,6 @@ class YouTube:
                 "no_warnings": True,
             }
             ydl_opts = _with_js_runtime(ydl_opts)
-            # Attach cookies only when opted in (or forced by autoplay). The
-            # deploy IP 403s signed-in googlevideo requests, so the anonymous
-            # extract is the reliable default for normal playback.
-            use_cookies = bool(cookie) and (
-                force_cookies or os.environ.get("ALLOW_COOKIE_DOWNLOAD")
-            )
 
             loop = asyncio.get_event_loop()
             def _run():
@@ -927,14 +999,16 @@ class YouTube:
                         return formats[-1].get("url")
                     return None
 
+            # Anonymous extract needs a tight cap: a hang here just delays the
+            # (working) download fallback. Cookies path keeps a little more room.
             url = await asyncio.wait_for(
                 loop.run_in_executor(None, _run),
-                timeout=30,
+                timeout=18 if not use_cookies else 30,
             )
             if url:
                 logger.info(
                     "Stream URL via %s: %s",
-                    "Cookies Base64" if cookie else "yt-dlp",
+                    "Cookies Base64" if use_cookies else "yt-dlp",
                     video_id,
                 )
                 return url
