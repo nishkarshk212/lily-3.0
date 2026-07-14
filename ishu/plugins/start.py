@@ -128,3 +128,15 @@ async def slash_help(_, message: types.Message):
         reply_markup=buttons.help_markup(message.lang),
         quote=True,
     )
+
+
+# Catch-all: record EVERY group the bot is active in so /stats reflects reality.
+# Bots cannot enumerate their own dialogs (GetDialogs is forbidden), so the only
+# reliable way to know a group is to observe activity in it. Low priority
+# (group=99) so it never precedes command/service handlers.
+@app.on_message(filters.group & ~app.bl_users, group=99)
+async def _record_group(_, message: types.Message):
+    chat = message.chat
+    if chat.type not in (enums.ChatType.GROUP, enums.ChatType.SUPERGROUP):
+        return
+    await db.add_chat(chat.id, getattr(chat, "title", None))
