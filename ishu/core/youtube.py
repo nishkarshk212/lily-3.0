@@ -586,35 +586,11 @@ class YouTube:
         self.api      = None
         self.cookies_dir = os.path.join(os.path.dirname(__file__), "..", "cookies")
 
-        # Decode COOKIES_DATA (base64) env var → cookie_0.txt for yt-dlp use
-        cookies_data = getattr(config, "COOKIES_DATA", None) or os.environ.get("COOKIES_DATA")
-        if cookies_data:
-            try:
-                import base64, gzip
-                # Be tolerant: env UIs and copy/paste often add whitespace,
-                # newlines, or a truncated trailing char. Strip surrounds, and
-                # pad a missing '=' so b64decode doesn't throw on alignment.
-                cd = cookies_data.strip().replace("\n", "").replace("\r", "").replace(" ", "")
-                pad = (-len(cd)) % 4
-                raw = base64.b64decode(cd + "=" * pad)
-                # Accept both plain base64 (Netscape cookie text) and gzip+base64
-                # (gzip magic is 0x1f 0x8b). Some env generators emit the latter.
-                if raw[:2] == b"\x1f\x8b":
-                    decoded = gzip.decompress(raw).decode("utf-8")
-                else:
-                    decoded = raw.decode("utf-8")
-                os.makedirs(self.cookies_dir, exist_ok=True)
-                with open(os.path.join(self.cookies_dir, "cookie_0.txt"), "w") as f:
-                    f.write(decoded)
-                logger.info("Loaded cookies from COOKIES_DATA (base64%s).",
-                            " +gzip" if raw[:2] == b"\x1f\x8b" else "")
-            except Exception as e:
-                logger.error(
-                    "Error decoding COOKIES_DATA (len=%d): %s — the blob is "
-                    "likely truncated/corrupted in transit (paste the FULL "
-                    "blob on one line, no trailing characters dropped).",
-                    len(cookies_data.strip()), e,
-                )
+        # Load cookies into cookie_0.txt for yt-dlp. Supports COOKIES_DATA
+        # (base64, tolerant of whitespace/padding) and COOKIES_FILE (path to a
+        # raw Netscape or gzip'd file on disk — use this to avoid paste
+        # truncation when deploying).
+        self._load_cookies()
 
         self.dl_stats = {
             "total_requests": 0,
@@ -635,6 +611,58 @@ class YouTube:
         return not self.valid(url)
 
     # ── Cookie management ─────────────────────────────────────────────────────
+    def _load_cookies(self) -> None:
+        """Load YouTube cookies into cookie_0.txt for yt-dlp.
+
+        Two sources, in order:
+          - COOKIES_DATA: base64 (gzip or plain). Tolerant of surrounding
+            whitespace and a missing '=' pad.
+          - COOKIES_FILE: path to a raw Netscape cookies.txt OR a gzip'd file
+            on disk. Prefer this when deploying to avoid paste truncation.
+        """
+        import base64, gzip
+
+        def _write(decoded: str, src: str, gz: bool) -> None:
+            os.makedirs(self.cookies_dir, exist_ok=True)
+            with open(os.path.join(self.cookies_dir, "cookie_0.txt"), "w") as f:
+                f.write(decoded)
+            logger.info("Loaded cookies from %s (base64%s).", src,
+                        " +gzip" if gz else "")
+
+        # 1) COOKIES_DATA (base64)
+        cookies_data = getattr(config, "COOKIES_DATA", None) or os.environ.get("COOKIES_DATA")
+        if cookies_data:
+            try:
+                cd = cookies_data.strip().replace("\n", "").replace("\r", "").replace(" ", "")
+                pad = (-len(cd)) % 4
+                raw = base64.b64decode(cd + "=" * pad)
+                if raw[:2] == b"\x1f\x8b":
+                    decoded = gzip.decompress(raw).decode("utf-8")
+                else:
+                    decoded = raw.decode("utf-8")
+                _write(decoded, "COOKIES_DATA", raw[:2] == b"\x1f\x8b")
+                return
+            except Exception as e:
+                logger.error(
+                    "Error decoding COOKIES_DATA (len=%d): %s — the blob is "
+                    "likely truncated/corrupted in transit. Prefer COOKIES_FILE "
+                    "(a cookies.txt path) to avoid paste truncation.",
+                    len(cookies_data.strip()), e,
+                )
+
+        # 2) COOKIES_FILE (path on disk)
+        cookies_file = getattr(config, "COOKIES_FILE", None) or os.environ.get("COOKIES_FILE")
+        if cookies_file and os.path.exists(cookies_file):
+            try:
+                data = open(cookies_file, "rb").read()
+                if data[:2] == b"\x1f\x8b":
+                    decoded = gzip.decompress(data).decode("utf-8")
+                else:
+                    decoded = data.decode("utf-8")
+                _write(decoded, "COOKIES_FILE", data[:2] == b"\x1f\x8b")
+            except Exception as e:
+                logger.error("Error reading COOKIES_FILE (%s): %s", cookies_file, e)
+
     async def save_cookies(self, urls: list) -> None:
         if not urls:
             return

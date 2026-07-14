@@ -381,39 +381,43 @@ class MongoDB:
         logger.info("Migration completed successfully.")
 
     async def crawl_dialogs(self) -> int:
-        """Crawl the bot's real Telegram dialogs and persist every supergroup
-        into the chats collection. This is what makes group counts (and the
-        active-calls path) reflect reality instead of only the chats that
-        happened to trigger a DB write during playback.
+        """Backfill the chats collection with every group the bot is actually
+        in. Bots cannot call GetDialogs (BOT_METHOD_INVALID), so we crawl via
+        the userbot sessions (userbot.clients) — same mechanism auto_leave
+        uses in misc.py. Persists every supergroup/group not already known.
 
         Returns the number of groups discovered. Safe to call repeatedly;
         chats already known are skipped.
         """
-        from ishu import app
-        # ChatType lives in pyrogram.enums (kurigram) and pyrogram.types (pyrogram).
-        # Import defensively so it works on both.
-        try:
-            from pyrogram.enums import ChatType
-        except ImportError:
-            from pyrogram.types import ChatType
+        from pyrogram import enums
+        ChatType = enums.ChatType
 
         count = 0
-        try:
-            async for dialog in app.get_dialogs():
-                chat = dialog.chat
-                if not chat.id:
-                    continue
-                if chat.type not in (ChatType.SUPERGROUP, ChatType.GROUP):
-                    continue
-                count += 1
-                if not await self.is_chat(chat.id):
-                    self.chats.append(chat.id)
-                    await self.chatsdb.insert_one(
-                        {"_id": chat.id, "title": getattr(chat, "title", None)}
-                    )
+        crawled_any = False
+        for ub in getattr(userbot, "clients", []):
+            try:
+                async for dialog in ub.get_dialogs():
+                    chat = dialog.chat
+                    if not chat.id:
+                        continue
+                    if chat.type not in (ChatType.SUPERGROUP, ChatType.GROUP):
+                        continue
+                    count += 1
+                    if not await self.is_chat(chat.id):
+                        self.chats.append(chat.id)
+                        await self.chatsdb.insert_one(
+                            {"_id": chat.id, "title": getattr(chat, "title", None)}
+                        )
+                crawled_any = True
+            except Exception as e:
+                logger.warning("Dialog crawl failed for a userbot session: %s", e)
+        if crawled_any:
             logger.info("Crawled dialogs: found %d groups.", count)
-        except Exception as e:
-            logger.warning("Dialog crawl failed (group count may be low): %s", e)
+        else:
+            logger.warning(
+                "Dialog crawl found no userbot sessions (set SESSION1) — "
+                "group count is limited to chats the bot has seen."
+            )
         return count
 
     async def load_cache(self) -> None:

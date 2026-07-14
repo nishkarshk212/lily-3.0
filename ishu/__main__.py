@@ -33,10 +33,10 @@ async def main():
     await db.connect()
 
     await app.boot()
-    # Populate the chats collection with the bot's REAL groups (db.connect ran
-    # before app was connected, so it could only load what was already in DB).
-    await db.crawl_dialogs()
     await userbot.boot()
+    # Backfill chats from the userbot's real dialogs (bots can't call
+    # GetDialogs, so this must run AFTER userbot.boot() populates clients).
+    await db.crawl_dialogs()
     await anon.boot()
 
     # Thumbnail initialization
