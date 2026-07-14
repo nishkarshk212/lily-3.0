@@ -253,9 +253,18 @@ class TgCall(PyTgCalls):
         last_title = getattr(last, "title", None) or ""
         if last_id:
             track = await yt.get_related(last_id, msg.id)
+            # get_related may occasionally surface the finished video itself
+            # (e.g. as the first "up next" entry) — skip an identical id so we
+            # never replay the same track under autoplay.
+            if track and track.id == last_id:
+                track = None
         if not track and last_title:
             query = last_title.split("|")[0].split("(")[0].strip()
-            track = await yt.search(f"{query} official audio", msg.id, video=False)
+            # search() already appends "official audio" and filters
+            # remixes/covers, so do NOT double-append it here — passing the
+            # raw title is what keeps the fallback from re-returning the same
+            # song as `last`.
+            track = await yt.search(query, msg.id, video=False)
         if not track:
             return await self.stop(chat_id)
 

@@ -28,6 +28,7 @@ MENU_COMMANDS = [
     types.BotCommand("auth", "Authorize a user for admin commands (unauth)"),
     types.BotCommand("admincache", "Reload the admin list for this chat"),
     types.BotCommand("playmode", "Toggle admin-only play mode"),
+    types.BotCommand("gadd", "Add a bot to all groups (owner only)"),
 ]
 
 PRIVATE_COMMANDS = [

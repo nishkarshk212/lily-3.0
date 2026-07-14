@@ -930,25 +930,43 @@ class YouTube:
     async def get_related(self, video_id: str, message_id: int) -> "Track | None":
         """Return a RELATED Track for autoplay (NOT the same song).
 
-        Uses yt-dlp to pull the 'related' videos of the current track, then
-        returns the first one as a Track. This guarantees a different track
-        (YouTube's own up-next recommendations) instead of re-searching the
-        current title (which just returns the same song).
+        Uses yt-dlp to pull YouTube's up-next 'related_videos' of the current
+        track and returns the first usable one as a Track. This guarantees a
+        *different* track (YouTube's own recommendations) instead of
+        re-searching the current title (which just returns the same song).
+
+        FIX (autoplay was broken): the old call used ``extract_flat=True``,
+        which SKIPS the watch_next browse request that populates
+        ``related_videos`` — so it always returned ``None`` and forced the
+        caller into its title-search fallback (same song). A normal (non-flat)
+        extract is used here so the related list is actually filled.
         """
         link = self.base + video_id
         loop = asyncio.get_event_loop()
         def _run():
             try:
-                with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True,
-                                        "extract_flat": True}) as ydl:
+                # NOTE: extract_flat=True omits the watch_next browse request,
+                # so YouTube never returns 'related_videos'. Use a normal
+                # extract (player-client bypass from _with_js_runtime helps
+                # dodge the bot-check) so the up-next list is populated.
+                with yt_dlp.YoutubeDL(_with_js_runtime({
+                    "quiet": True,
+                    "no_warnings": True,
+                })) as ydl:
                     info = ydl.extract_info(link, download=False) or {}
                 rel = info.get("related_videos") or []
-                # Prefer an actual video entry, not a playlist/mix.
+                # Skip the finished video itself and any playlist/mix/channel
+                # entries (no usable single-video id / duration).
                 for r in rel:
                     rid = r.get("id")
-                    if rid and r.get("url") and "list=" not in (r.get("url") or ""):
-                        return r
-                return rel[0] if rel else None
+                    if not rid or rid == video_id:
+                        continue
+                    if "list=" in (r.get("url") or ""):
+                        continue
+                    if r.get("duration") is None and not r.get("title"):
+                        continue
+                    return r
+                return None
             except Exception as e:
                 logger.warning("get_related failed for %s: %s", video_id, e)
                 return None
