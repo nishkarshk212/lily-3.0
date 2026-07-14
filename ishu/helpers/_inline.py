@@ -57,7 +57,9 @@ class Inline:
                     self.ikb(text="▢", callback_data=f"controls stop {chat_id}", style=enums.ButtonStyle.PRIMARY),
                 ]
             )
-            # Autoplay toggle: green (POSITIVE) when on, red (NEGATIVE) when off.
+            # Autoplay toggle: green (SUCCESS) when on, red (DANGER) when off.
+            # This kurigram build's ButtonStyle only has DEFAULT/PRIMARY/DANGER/
+            # SUCCESS — SUCCESS is the green one. (POSITIVE/NEGATIVE don't exist.)
             # Label per user request: small-caps "ᴀᴜᴛᴏᴘʟᴀʏ" + ♾ (U+267E) when on.
             keyboard.append(
                 [
@@ -67,9 +69,9 @@ class Inline:
                         ),
                         callback_data=f"autoplay {chat_id}",
                         style=(
-                            enums.ButtonStyle.POSITIVE
+                            enums.ButtonStyle.SUCCESS
                             if autoplay
-                            else enums.ButtonStyle.NEGATIVE
+                            else enums.ButtonStyle.DANGER
                         ),
                     )
                 ]
