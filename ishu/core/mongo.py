@@ -380,6 +380,37 @@ class MongoDB:
         await self.cache.insert_one({"_id": "migrated"})
         logger.info("Migration completed successfully.")
 
+    async def crawl_dialogs(self) -> int:
+        """Crawl the bot's real Telegram dialogs and persist every supergroup
+        into the chats collection. This is what makes group counts (and the
+        active-calls path) reflect reality instead of only the chats that
+        happened to trigger a DB write during playback.
+
+        Returns the number of groups discovered. Safe to call repeatedly;
+        chats already known are skipped.
+        """
+        from ishu import app
+        from pyrogram.types import ChatType
+
+        count = 0
+        try:
+            async for dialog in app.get_dialogs():
+                chat = dialog.chat
+                if not chat.id:
+                    continue
+                if chat.type not in (ChatType.SUPERGROUP, ChatType.GROUP):
+                    continue
+                count += 1
+                if not await self.is_chat(chat.id):
+                    self.chats.append(chat.id)
+                    await self.chatsdb.insert_one(
+                        {"_id": chat.id, "title": getattr(chat, "title", None)}
+                    )
+            logger.info("Crawled dialogs: found %d groups.", count)
+        except Exception as e:
+            logger.warning("Dialog crawl failed (group count may be low): %s", e)
+        return count
+
     async def load_cache(self) -> None:
         doc = await self.cache.find_one({"_id": "migrated"})
         if not doc:
