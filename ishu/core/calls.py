@@ -236,39 +236,43 @@ class TgCall(PyTgCalls):
         await self.play_media(chat_id, msg, media)
 
 
-    async def _autoplay_next(self, chat_id: int, last_title: str) -> None:
-        """Fetch a RELATED track and stream it live via cookies (no download)."""
+    async def _autoplay_next(self, chat_id: int, last) -> None:
+        """Fetch a RELATED track (not the same song) and stream it live.
+
+        Uses the just-finished track's id to pull YouTube's own up-next
+        recommendations, then plays it directly. The related track is added to
+        the queue as the current item so the autoplay chain continues (the
+        previous implementation never re-queued it, so autoplay died after one
+        track). Falls back to a title search only if related lookup fails.
+        """
         _lang = await lang.get_lang(chat_id)
         msg = await app.send_message(chat_id=chat_id, text=_lang["play_searching"])
 
-        # Prefer YouTube's own 'related' track (guaranteed different from the
-        # current one) using the last played video id. Fall back to a search of
-        # the title if we have no id or related lookup fails.
-        last = queue.get_current(chat_id)
         track = None
         last_id = getattr(last, "id", None)
+        last_title = getattr(last, "title", None) or ""
         if last_id:
             track = await yt.get_related(last_id, msg.id)
-        if not track:
+        if not track and last_title:
             query = last_title.split("|")[0].split("(")[0].strip()
             track = await yt.search(f"{query} official audio", msg.id, video=False)
         if not track:
             return await self.stop(chat_id)
 
         track.user = "Autoplay"
-        # Live stream via cookies base64 — no file download. Force cookies so
-        # the googlevideo URL is fetched with the signed-in account. play_media
-        # then plays it directly; the background download is intentionally
-        # skipped (user wants live streaming, not local files).
+        # Live stream via cookies — force cookies so the googlevideo URL is
+        # fetched with the signed-in account. Fall back to a one-off download
+        # if the stream fails (e.g. region 403) so autoplay keeps the queue alive.
         track.stream_url = await yt.get_stream_url(track.id, force_cookies=True)
         if not track.stream_url:
-            # Stream failed (e.g. region 403) — fall back to a one-off download
-            # so autoplay still keeps the queue alive.
             track.file_path = await yt.download(track.id)
         if not track.stream_url and not track.file_path:
             await msg.edit_text(_lang["error_no_file"].format(config.SUPPORT_CHAT))
             return await self.play_next(chat_id)
 
+        # Re-queue the related track as the current item so the next
+        # StreamEnded continues the autoplay chain instead of stopping.
+        queue.force_add(chat_id, track)
         track.message_id = msg.id
         await self.play_media(chat_id, msg, track)
 
@@ -289,12 +293,11 @@ class TgCall(PyTgCalls):
         # ── FIX: check media is not None BEFORE accessing its attributes ──────
         if not media:
             # Autoplay: when the queue empties, fetch a related track from the
-            # last played title so the stream keeps going instead of stopping.
+            # last played song so the stream keeps going instead of stopping.
             if await db.get_autoplay(chat_id):
                 last = current_media
-                title = getattr(last, "title", None) if last else None
-                if title:
-                    await self._autoplay_next(chat_id, title)
+                if last:
+                    await self._autoplay_next(chat_id, last)
                 return
             return await self.stop(chat_id)
 
