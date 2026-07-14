@@ -609,8 +609,12 @@ class YouTube:
                 logger.info("Loaded cookies from COOKIES_DATA (base64%s).",
                             " +gzip" if raw[:2] == b"\x1f\x8b" else "")
             except Exception as e:
-                logger.error("Error decoding COOKIES_DATA (len=%d): %s",
-                             len(cookies_data.strip()), e)
+                logger.error(
+                    "Error decoding COOKIES_DATA (len=%d): %s — the blob is "
+                    "likely truncated/corrupted in transit (paste the FULL "
+                    "blob on one line, no trailing characters dropped).",
+                    len(cookies_data.strip()), e,
+                )
 
         self.dl_stats = {
             "total_requests": 0,

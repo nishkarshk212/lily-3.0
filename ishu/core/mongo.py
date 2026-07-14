@@ -390,7 +390,12 @@ class MongoDB:
         chats already known are skipped.
         """
         from ishu import app
-        from pyrogram.types import ChatType
+        # ChatType lives in pyrogram.enums (kurigram) and pyrogram.types (pyrogram).
+        # Import defensively so it works on both.
+        try:
+            from pyrogram.enums import ChatType
+        except ImportError:
+            from pyrogram.types import ChatType
 
         count = 0
         try:
