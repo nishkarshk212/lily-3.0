@@ -44,8 +44,13 @@ async def _background_download_task(track) -> None:
                     "Background: file download failed for %s — will use stream URL",
                     track.id,
                 )
+                await utils.error_log(
+                    track._chat_id, "play:bg_file_download_empty",
+                    Exception(f"yt.download returned no path for {track.id}"), track,
+                )
     except Exception as e:
         logger.warning("Background download task failed for %s: %s", track.id, e)
+        await utils.error_log(track._chat_id, "play:bg_download_exception", e, track)
 
 
 def _start_background_download(track) -> None:
@@ -134,8 +139,14 @@ async def play_hndlr(
             m.lang["play_duration_limit"].format(config.DURATION_LIMIT // 60)
         )
 
-    if await db.is_logger():
-        await utils.play_log(m, sent.link, file.title, file.duration)
+    # Tag the resolved track(s) with the chat id so background/error logging
+    # knows where to report playback failures.
+    file._chat_id = m.chat.id
+    for t in tracks:
+        t._chat_id = m.chat.id
+
+    if config.PLAY_LOG:
+        await utils.play_log(m, sent.link, file.title, file.duration, media=file)
 
     file.user = mention
 

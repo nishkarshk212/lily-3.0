@@ -45,6 +45,29 @@ class Config:
         self.THUMB_GEN: bool = getenv("THUMB_GEN", "True").lower() == "true"
         self.VIDEO_PLAY: bool = getenv("VIDEO_PLAY", "True").lower() == "true"
 
+        # ── Scheduled maintenance ─────────────────────────────────────────────
+        # Daily auto-restart (keeps the bot snappy, clears leaked memory/lock
+        # files). Set DAILY_RESTART_TIME to a 24h "HH:MM" string (local TZ of
+        # the host). Default 03:00.
+        self.DAILY_RESTART: bool = getenv("DAILY_RESTART", "True").lower() == "true"
+        self.DAILY_RESTART_TIME: str = getenv("DAILY_RESTART_TIME", "03:00")
+
+        # Auto cleanup — removes orphaned download/thumbnail files not
+        # referenced by an active stream. A full disk is the #1 cause of the
+        # bot slowing down (yt-dlp / ffmpeg temp writes start failing).
+        self.AUTO_CLEANUP: bool = getenv("AUTO_CLEANUP", "True").lower() == "true"
+        # Only delete cached files once free disk space drops below this %.
+        self.CLEANUP_DISK_THRESHOLD: int = int(getenv("CLEANUP_DISK_THRESHOLD", 20))
+        # How often (seconds) to run the cleanup scan. Default every 30 min.
+        self.CLEANUP_INTERVAL: int = int(getenv("CLEANUP_INTERVAL", 1800))
+
+        # ── Logging to the log group ──────────────────────────────────────────
+        # Always-forward detailed play logs + playback/download errors to
+        # LOGGER_ID (in addition to the file logger). Controlled by env so it
+        # can be toggled without a code change.
+        self.PLAY_LOG: bool = getenv("PLAY_LOG", "True").lower() == "true"
+        self.ERROR_LOG: bool = getenv("ERROR_LOG", "True").lower() == "true"
+
         self.LANG_CODE = getenv("LANG_CODE", "en")
 
         self.COOKIES_URL = [

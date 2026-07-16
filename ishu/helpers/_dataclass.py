@@ -19,6 +19,9 @@ class Media:
     time: int = 0
     user: str | None = None
     video: bool = False
+    # Chat id the track originated from (set at play time) so background /
+    # error logging knows where to report a playback failure.
+    _chat_id: int = 0
 
 
 @dataclass
@@ -37,3 +40,6 @@ class Track:
     user: str | None = None
     view_count: str | None = None
     video: bool = False
+    # Chat id the track originated from (set at play time) so background /
+    # error logging knows where to report a playback failure.
+    _chat_id: int = 0

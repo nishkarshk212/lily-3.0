@@ -7,7 +7,7 @@ import re
 
 from pyrogram import enums, types
 
-from ishu import app
+from ishu import app, config, logger
 
 
 class Utilities:
@@ -91,9 +91,39 @@ class Utilities:
         link: str,
         title: str,
         duration: str,
+        media=None,
     ) -> None:
+        """Forward a detailed play log to the log group (LOGGER_ID).
+
+        Controlled by config.PLAY_LOG so it can be toggled off without a code
+        change. We intentionally send this on *every* play request (not just
+        when the /logger switch is on) so the owner always has a searchable
+        audit trail of what the bot played and from where. The log group is
+        skipped for messages sent from inside the log group itself.
+        """
+        if not config.PLAY_LOG:
+            return
         if m.chat.id == app.logger:
             return
+
+        # Extra detail when a media object is supplied.
+        extra = ""
+        if media is not None:
+            source = "file" if getattr(media, "file_path", None) else (
+                "stream" if getattr(media, "stream_url", None) else "fetching"
+            )
+            extra = (
+                f"\n<b>Video:</b> {'yes' if getattr(media, 'video', False) else 'no'}"
+                f"\n<b>Source:</b> {source}"
+            )
+            vid = getattr(media, "id", None)
+            if vid:
+                extra += f"\n<b>Video ID:</b> <code>{vid}</code>"
+            if getattr(media, "view_count", None):
+                extra += f"\n<b>Views:</b> {media.view_count}"
+            if getattr(media, "channel_name", None):
+                extra += f"\n<b>Channel:</b> {media.channel_name}"
+
         _text = m.lang["play_log"].format(
             app.name,
             m.chat.id,
@@ -103,8 +133,47 @@ class Utilities:
             link,
             title,
             duration,
+        ) + extra
+        try:
+            await app.send_message(chat_id=app.logger, text=_text)
+        except Exception as ex:
+            logger.warning("play_log send failed: %s", ex)
+
+    async def error_log(
+        self,
+        chat_id: int,
+        context: str,
+        error: Exception,
+        media=None,
+    ) -> None:
+        """Forward a playback / download error to the log group (LOGGER_ID).
+
+        Controlled by config.ERROR_LOG. This gives the owner a real-time view
+        of failures (dead stream URLs, download failures, Telegram server
+        errors) instead of having to dig through log.txt.
+        """
+        if not config.ERROR_LOG:
+            return
+        import traceback
+
+        detail = (
+            f"⚠️ <b>Playback / Download Error</b>\n\n"
+            f"<b>Bot:</b> {app.name}\n"
+            f"<b>Chat:</b> <code>{chat_id}</code>\n"
+            f"<b>Context:</b> {context}\n"
+            f"<b>Type:</b> <code>{type(error).__name__}</code>\n"
+            f"<b>Error:</b> <code>{str(error)[:800]}</code>"
         )
-        await app.send_message(chat_id=app.logger, text=_text)
+        if media is not None:
+            vid = getattr(media, "id", None)
+            if vid:
+                detail += f"\n<b>Video ID:</b> <code>{vid}</code>"
+            detail += f"\n<b>Source:</b> {'file' if getattr(media, 'file_path', None) else ('stream' if getattr(media, 'stream_url', None) else 'none')}"
+        detail += f"\n<pre>{traceback.format_exc()[-1500:]}</pre>"
+        try:
+            await app.send_message(chat_id=app.logger, text=detail)
+        except Exception as ex:
+            logger.warning("error_log send failed: %s", ex)
 
     async def send_log(self, m: types.Message, chat: bool = False) -> None:
         if chat:
