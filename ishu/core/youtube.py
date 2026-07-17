@@ -957,6 +957,7 @@ class YouTube:
                 rel = info.get("related_videos") or []
                 # Skip the finished video itself and any playlist/mix/channel
                 # entries (no usable single-video id / duration).
+                candidates = []
                 for r in rel:
                     rid = r.get("id")
                     if not rid or rid == video_id:
@@ -965,8 +966,12 @@ class YouTube:
                         continue
                     if r.get("duration") is None and not r.get("title"):
                         continue
-                    return r
-                return None
+                    candidates.append(r)
+                if not candidates:
+                    return None
+                # Randomize so autoplay plays a DIFFERENT song each cycle
+                # instead of always the same "up next" entry.
+                return random.choice(candidates)
             except Exception as e:
                 logger.warning("get_related failed for %s: %s", video_id, e)
                 return None
